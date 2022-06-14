@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-Hans-CN"><head><meta charset="utf-8"/><meta http-equiv="X-UA-Compatible" content="IE=Edge"/><link rel="stylesheet" type="text/css" href="../css/modern-norm.min.css"/><link rel="stylesheet" type="text/css" href="../css/prism.min.css"/><link rel="stylesheet" type="text/css" href="../css/katex.min.css"/><link rel="stylesheet" type="text/css" href="../css/wolai.css"/><title>DevOps - wolai 笔记</title><link rel="shortcut icon" href="media/devops_1.png"></link></head><body><header><div class="image has" style="background-position-y: 50%; background-image: url(&quot;media/src=http___img2020.cnblogs.com_blog_2046037_202008.jpg&quot;)"></div><div class="title"><div class="banner"><div class="icon icon-image" style="background-image: url(&quot;media/devops.png&quot;)"></div></div><div data-title="DevOps" class="main-title"></div></div></header><article><h1 class="wolai-block"><span class="inline-wrap">DevOps</span></h1><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/1646539691709641.png" style="width: 100%"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>总揽</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">你需要学过<span class="jill"></span>Kubernetes，否则当不容易理解本教程！</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">我们需要有<span class="jill"></span>Gitlab，用户内部开发的仓库，开发的代码<span class="jill"></span>push<span class="jill"></span>到上面，还有要<span class="jill"></span>Harbor Docker<span class="jill"></span>镜像的私有仓库（私服），作为我们项目镜像的拉取部署。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">然后搭建<span class="jill"></span>K8S<span class="jill"></span>集群（k8s-master，k8s-node01），将<span class="jill"></span>Jenkins<span class="jill"></span>部署在<span class="jill"></span>k8s<span class="jill"></span>上。然后进行各种准备工作，就可以对<span class="jill"></span>Gitlab<span class="jill"></span>的项目进行打包部署了。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">资料：</span><span class="inline-wrap"><a href="https://github.com/18476305640/fileBox/tree/main"><span>https://github.com/18476305640/fileBox/tree/main</span></a></span><span class="inline-wrap">  &gt; DevOps</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">其它学习参考：</span></div></div><div class="wolai-sub-page wolai-block"><div class="page-icon icon-image" style="background-image: url(&quot;media/1641538346333.webp&quot;)"></div><a href="kubernetes/Kubernetes.html"><span>Kubernetes</span></a></div><div class="wolai-sub-page wolai-block"><div class="page-icon icon-image" style="background-image: url(&quot;media/unnamed%20(1).jpg&quot;)"></div><a href="jenkins/Jenkins.html"><span>Jenkins</span></a></div><h3 class="wolai-block"><span class="inline-wrap">1.1<span class="jill"></span>虚拟机的准备</span></h3><div class="wolai-block wolai-text"><div><span class="inline-wrap">推荐：</span><span class="inline-wrap"><a href="http://mirrors.ustc.edu.cn/centos/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2009.iso"><span>http://mirrors.ustc.edu.cn/centos/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2009.iso</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">虚拟机：192.168.87.100 、192.168.87.101，192.168.87.102，192.168.87.103 。注意安装好虚拟机后，设置好静态<span class="jill"></span>ip（用<span class="jill"></span>nmtui<span class="jill"></span>命令）。</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/16465422477121646542246944.png" style="width: 915.3333333333334px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h3 class="wolai-block"><span class="inline-wrap">2.1Gitlab<span class="jill"></span>代码仓库的准备</span></h3><div class="wolai-block wolai-text"><div><span class="inline-wrap">1）基本环境</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#安装相关依赖</span>
+yum -y <span class="token function">install</span> policycoreutils openssh-server openssh-clients postﬁx
+<span class="token comment">#启动ssh服务&amp;设置为开机启动</span>
+systemctl <span class="token builtin class-name">enable</span> sshd <span class="token operator">&amp;&amp;</span> <span class="token function">sudo</span> systemctl start sshd
+<span class="token comment">#设置postﬁx开机自启，并启动，postﬁx支持gitlab发信功能</span>
+yum <span class="token function">install</span> postfix
+systemctl <span class="token builtin class-name">enable</span> postﬁx <span class="token operator">&amp;&amp;</span> systemctl start postﬁx
+<span class="token comment">#开放ssh以及http服务，然后重新加载防火墙列表</span>
+firewall-cmd --add-service<span class="token operator">=</span>ssh --permanent
+firewall-cmd --add-service<span class="token operator">=</span>http --permanent
+firewall-cmd --reload
+<span class="token comment">#如果关闭防火墙就不需要做以上配置</span>
+<span class="token comment">#下载gitlab包，并且安装在线下载安装包：</span>
+<span class="token function">wget</span> <span class="token punctuation">[</span>https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el6/gitlab-ce-12.4.2-ce.0.el6.x<span class="token punctuation">]</span><span class="token punctuation">(</span>https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el6/gitlab-ce-12.4.2-ce.0.el6.x<span class="token punctuation">)</span> 86_64.rpm
+<span class="token comment">#安装：</span>
+<span class="token function">rpm</span> -i gitlab-ce-12.4.2-ce.0.el6.x86_64.rpm</pre></div></code-block><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">修改<span class="jill"></span>gitlab<span class="jill"></span>配置</span></li></ol><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token function">vi</span> /etc/gitlab/gitlab.rb
+<span class="token comment">###修改gitlab访问地址和端口，默认为80，我们改为82 </span>
+<span class="token comment">#修改external_url 'http://192.168.87.100'</span>
+<span class="token comment">#加入nginx['listen_port'] = 82</span></pre></div></code-block><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">重载配置及启动<span class="jill"></span>gitlab</span></li></ol><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre>gitlab-ctl reconfigure
+gitlab-ctl restart</pre></div></code-block><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">把端口添加到防火墙</span></li></ol><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#开放gitlab的82端口</span>
+firewall-cmd --zone<span class="token operator">=</span>public --add-port<span class="token operator">=</span><span class="token number">82</span>/tcp --permanent 
+firewall-cmd --reload</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">启动成功后，看到以下修改管理员<span class="jill"></span>root<span class="jill"></span>密码的页面，修改密码后，然后登录即可</span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">卸载<span class="jill"></span>gitlab</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap">[教程]</span><span class="inline-wrap"><a href="https://www.cnblogs.com/peteremperor/p/10837551.html"><span>https://www.cnblogs.com/peteremperor/p/10837551.html</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">10、使用：
+先创建一个组，然后创建一个用户，在组中创建一个项目，为项目添加成员，切换到成员，进行日常开发！
+</span><span class="inline-wrap"><code>创建组后向组中加入成员</code></span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/16346538723901634653872219.png" style="width: 1416px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h3 class="wolai-block"><span class="inline-wrap">3.1Harbor<span class="jill"></span>仓库</span></h3><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/1627212945189-1627212945174.png" style="width: 902.6666666666666px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">简介：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">Harbor（港口，港湾）是一个用于存储和分发<span class="jill"></span>Docker<span class="jill"></span>镜像的企业级<span class="jill"></span>Registry<span class="jill"></span>服务器。
+除了<span class="jill"></span>Harbor<span class="jill"></span>这个私有镜像仓库之外，还有<span class="jill"></span>Docker<span class="jill"></span>官方提供的<span class="jill"></span>Registry。相对<span class="jill"></span>Registry，Harbor<span class="jill"></span>具有很
+多优势：</span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">提供分层传输机制，优化网络传输 Docker<span class="jill"></span>镜像是是分层的，而如果每次传输都使用全量文件(所以</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap">用<span class="jill"></span>FTP<span class="jill"></span>的方式并不适合)，显然不经济。必须提供识别分层传输的机制，以层的<span class="jill"></span>UUID<span class="jill"></span>为标识，确定</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">传输的对象。</span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">提供<span class="jill"></span>WEB<span class="jill"></span>界面，优化用户体验 只用镜像的名字来进行上传下载显然很不方便，需要有一个用户界</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap">面可以支持登陆、搜索功能，包括区分公有、私有镜像。</span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">支持水平扩展集群 当有用户对镜像的上传下载操作集中在某服务器，需要对相应的访问压力作分</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap">解。</span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">良好的安全机制 企业中的开发团队有很多不同的职位，对于不同的职位人员，分配不同的权限，</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap">具有更好的安全性。</span></div></div><h4 class="wolai-block"><span class="inline-wrap">[1] 安装</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap">1）先安装<span class="jill"></span>Docker<span class="jill"></span>并启动<span class="jill"></span>Docker（已完成）</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">参考之前的安装过程
+2）先安装<span class="jill"></span>docker-compose</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token function">sudo</span> <span class="token function">curl</span> -L https://github.com/docker/compose/releases/download/1.27.2/docker-compose-<span class="token variable"><span class="token variable">`</span><span class="token function">uname</span> -s<span class="token variable">`</span></span>-<span class="token variable"><span class="token variable">`</span><span class="token function">uname</span> -m<span class="token variable">`</span></span> -o /usr/local/bin/docker-compose  <span class="token comment">#安装</span>
+<span class="token comment">#加速版 curl -L "https://get.daocloud.io/docker/compose/releases/download/1.27.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose</span>
+<span class="token function">sudo</span> <span class="token function">chmod</span> +x /usr/local/bin/docker-compose  
+docker-compose --version  <span class="token comment">#查看版本</span></pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">3）下载<span class="jill"></span>Harbor<span class="jill"></span>的压缩包（本课程版本为：v1.9.2）
+</span><span class="inline-wrap"><a href="https://github.com/goharbor/harbor/releases"><span>https://github.com/goharbor/harbor/releases</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">4）安装开始</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token function">tar</span> -xzf harbor-offline-installer-v1.9.2.tgz -C /usr/local/
+<span class="token builtin class-name">cd</span> /usr/local/harbor
+
+<span class="token function">vim</span> harbor.yml
+
+<span class="token comment">#修改内容1:   hostname: 192.168.87.102</span>
+<span class="token comment">#修改内容2:   port: 85  </span>
+<span class="token comment">#修改内容3：有http与https，就在前面，先一个，注释另一个。</span>
+<span class="token comment">#还可以修改登录密码，这里不作配置，下面使用的是默认的密码进行登录</span>
+
+./install.sh
+docker-compose up -d <span class="token comment">#启动</span>
+<span class="token comment">#docker-compose down -v #停止</span>
+</pre></div></code-block><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/16467492401271646749239917.png" style="width: 983.3333333333334px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">5）添加为开机自启
+vim /lib/systemd/system/harbor.service</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Text" class="marker"></div><pre>[Unit]
+Description=Harbor
+After=docker.service systemd-networkd.service systemd-resolved.service
+Requires=docker.service
+Documentation=http://github.com/vmware/harbor
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/local/bin/docker-compose -f  /usr/local/harbor/docker-compose.yml up
+ExecStop=/usr/local/bin/docker-compose -f /usr/local/harbor/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">systemctl enable harbor
+systemctl is-enabled harbor</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">8）访问<span class="jill"></span>Harbor
+</span><span class="inline-wrap"><a href="http://192.168.66.102:85"><span>http://192.168.66.102:85</span></a></span><span class="inline-wrap">
+默认账户密码：admin/Harbor12345</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">你可能会遇到的问题：</span><span class="inline-wrap"><a href="https://www.cnblogs.com/hallejuayahaha/p/13926575.html"><span>https://www.cnblogs.com/hallejuayahaha/p/13926575.html</span></a></span><span class="inline-wrap"> （参考）博主遇到了<span class="jill"></span>docker-compose<span class="jill"></span>过低找不到，导致启动报错：</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Text" class="marker"></div><pre>[root@localhost zhuangjie]# docker-compose up -d #启动
+ERROR: 
+        Can't find a suitable configuration file in this directory or any
+        parent. Are you in the right directory?
+
+        Supported filenames: docker-compose.yml, docker-compose.yaml
+        </pre></div></code-block><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#方法一重启!!</span>
+
+<span class="token comment">#方法二：</span>
+<span class="token function">sudo</span> <span class="token function">curl</span> -L https://github.com/docker/compose/releases/download/1.27.2/docker-compose-<span class="token variable"><span class="token variable">`</span><span class="token function">uname</span> -s<span class="token variable">`</span></span>-<span class="token variable"><span class="token variable">`</span><span class="token function">uname</span> -m<span class="token variable">`</span></span> -o /usr/local/bin/docker-compose
+<span class="token function">sudo</span> <span class="token function">chmod</span> +x /usr/local/bin/docker-compose
+docker-compose --version
+
+./install.sh <span class="token comment">#注意还要cd到Harbor根目录执行</span></pre></div></code-block><h4 class="wolai-block"><span class="inline-wrap">[2] 项目与用户</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap">登录后：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">1）创建私有项目（项目分为公开项目与私有项目）</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/1627218066729-1627218066687.png" style="width: 1256px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">2）创建用户</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/1627217685972-1627217685963.png" style="width: 1242px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">3）为项目添加成员：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/1627217922413-1627217922383.png" style="width: 1140px"/></figure></div><div class="wolai-block wolai-simple-table"><table><thead><tr><th style="width: 100px"><span class="inline-wrap">角色</span></th><th style="width: 552px"><span class="inline-wrap">权限说明</span></th></tr></thead><tbody><tr><td><span class="inline-wrap">访客</span></td><td><span class="inline-wrap">对于指定项目拥有只读权限</span></td></tr><tr><td><span class="inline-wrap">开发人员</span></td><td><span class="inline-wrap">对于指定项目拥有读写权限</span></td></tr><tr><td><span class="inline-wrap">维护人员</span></td><td><span class="inline-wrap">对于指定项目拥有读写权限，创建 Webhooks</span></td></tr><tr><td><span class="inline-wrap">项目管理员</span></td><td><span class="inline-wrap">除了读写权限，同时拥有用户管理/镜像扫描等管理权限</span></td></tr></tbody></table></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h3 class="wolai-block"><span class="inline-wrap">4.1<span class="jill"></span>安装<span class="jill"></span>K8S<span class="jill"></span>集群</span></h3><div class="wolai-block wolai-text"><div><span class="inline-wrap">要用到<span class="jill"></span>2<span class="jill"></span>台机器,一台用于<span class="jill"></span>master<span class="jill"></span>节点，一台用于<span class="jill"></span>node<span class="jill"></span>节点。K8S<span class="jill"></span>集群至少两台。</span></div></div><h4 class="wolai-block"><span class="inline-wrap">1）基本环境</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b>以下三条命令分别在对应的机器执行</b></span><span class="inline-wrap">
+hostnamectl set-hostname k8s-master
+hostnamectl set-hostname k8s-node01</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b>全<span class="jill"></span>k8s<span class="jill"></span>节点执行以下！</b></span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#将下面映射规则加入到hosts文件中</span>
+<span class="token function">cat</span> <span class="token operator">>></span>/etc/hosts <span class="token operator">&lt;&lt;</span><span class="token string">EOF
+192.168.87.101 k8s-master
+192.168.87.103 k8s-node01
+192.168.87.104 k8s-node02 
+EOF</span>
+
+yum <span class="token function">install</span> <span class="token function">vim</span> <span class="token function">wget</span> -y    <span class="token comment">#安装必要软件</span>
+<span class="token function">cat</span> /etc/redhat-release   <span class="token comment">#查看版本，版本不要小于Centos Linux 7.5.1804 (Core) 这个版本</span>
+
+<span class="token comment">#kubernetes要求集群中的节点时间必须精确一直，这里使用chronyd服务从网络同步时间</span>
+systemctl start chronyd
+systemctl <span class="token builtin class-name">enable</span> chronyd
+yum <span class="token function">install</span> ntpdate -y
+ntpdate ntp.aliyun.com
+<span class="token function">cp</span> -f /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+<span class="token function">date</span>
+<span class="token comment"># 1 关闭firewalld服务</span>
+systemctl stop firewalld
+systemctl disable firewalld
+<span class="token comment"># 2 关闭iptables服务</span>
+systemctl stop iptables
+systemctl disable iptables
+<span class="token comment">#  禁用selinux：编辑 /etc/selinux/config 文件，修改SELINUX的值为disable</span>
+<span class="token function">sed</span> -i <span class="token string">'/SELINUX/s/enforcing/disable/g'</span> /etc/selinux/config
+<span class="token comment">#禁用swap：编辑分区配置文件/etc/fstab，注释掉swap分区一行</span>
+<span class="token function">sed</span> -i <span class="token string">'/swap/s/^\//\#\//'</span> /etc/fstab
+swapoff -a  <span class="token comment">#临时关闭，否则master初始化报错</span>
+<span class="token comment">#修改linux的内核参数</span>
+<span class="token comment"># 修改linux的内核采纳数，添加网桥过滤和地址转发功能</span>
+<span class="token comment"># 编辑/etc/sysctl.d/kubernetes.conf文件，添加如下配置：</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span><span class="token string">EOF<span class="token bash punctuation"> <span class="token operator">></span> /etc/sysctl.d/kubernetes.conf</span>
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF</span>
+sysctl -p  <span class="token comment">#重新加载</span>
+modprobe br_netfilter  <span class="token comment"># 加载网桥过滤模块</span>
+lsmod <span class="token operator">|</span> <span class="token function">grep</span> br_netfilter  <span class="token comment"># 查看网桥过滤模块是否加载成功</span>
+<span class="token comment"># 1.安装ipset和ipvsadm</span>
+yum <span class="token function">install</span> ipset ipvsadmin -y
+<span class="token comment"># 2.添加需要加载的模块写入脚本文件</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span>EOF<span class="token operator">></span> /etc/sysconfig/modules/ipvs.modules
+<span class="token comment">#!/bin/bash</span>
+modprobe -- ip_vs
+modprobe -- ip_vs_rr
+modprobe -- ip_vs_wrr
+modprobe -- ip_vs_sh
+modprobe -- nf_conntrack_ipv4
+EOF
+<span class="token comment"># 3.为脚本添加执行权限</span>
+<span class="token function">chmod</span> +x /etc/sysconfig/modules/ipvs.modules
+<span class="token comment"># 4.执行脚本文件</span>
+/bin/bash /etc/sysconfig/modules/ipvs.modules
+<span class="token comment"># 5.查看对应的模块是否加载成功</span>
+lsmod <span class="token operator">|</span> <span class="token function">grep</span> -e ip_vs -e nf_conntrack_ipv4
+
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h4 class="wolai-block"><span class="inline-wrap">2）Docker<span class="jill"></span>的安装</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap">两台机器都要安装<span class="jill"></span>docker！</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#安装必要的软件包</span>
+<span class="token function">sudo</span> yum <span class="token function">install</span> -y yum-utils  device-mapper-persistent-data  lvm2
+<span class="token comment">#设置下载镜像的仓库</span>
+yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+<span class="token comment">#列出docker包列表</span>
+yum list docker-ce --showduplicates <span class="token operator">|</span> <span class="token function">sort</span> -r
+<span class="token comment">#安装指定版本  </span>
+<span class="token function">sudo</span> yum <span class="token function">install</span> docker-ce-18.06.1.ce -y
+<span class="token comment">#查看版本</span>
+docker -v
+<span class="token function">sudo</span> systemctl <span class="token builtin class-name">enable</span> docker <span class="token comment">#设置开机启动  </span>
+systemctl is-enabled docker  <span class="token comment">#查看是否设置为开机自启</span>
+<span class="token function">sudo</span> systemctl start docker <span class="token comment">#启动</span>
+<span class="token comment">#加入docker从国内拉取镜像</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span>EOF<span class="token operator">></span>/etc/docker/daemon.json
+<span class="token punctuation">{</span> 
+  <span class="token string">"registry-mirrors"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span><span class="token string">"https://zydiol88.mirror.aliyuncs.com"</span><span class="token punctuation">]</span>
+<span class="token punctuation">}</span>
+EOF
+<span class="token comment">#重启docker</span>
+<span class="token function">sudo</span> systemctl restart docker  
+systemctl status docker  <span class="token comment">#查看docker状态</span>
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h4 class="wolai-block"><span class="inline-wrap">3）开始安装<span class="jill"></span>K8S</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap">安装<span class="jill"></span>k8s<span class="jill"></span>组件，以下<span class="jill"></span>K8S<span class="jill"></span>全节点执行！</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#清空yum缓存</span>
+yum clean all  
+<span class="token comment"># 新增kubeadm yum 源</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span> <span class="token string">EOF<span class="token bash punctuation"> <span class="token operator">></span> /etc/yum.repos.d/kubernetes.repo</span>
+[kubernetes]
+name=Kubernetes Repo
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF</span>
+
+<span class="token comment">#使用yum下载安装包，进行本地安装，以免安装失败重新安装麻烦</span>
+yum -y <span class="token function">install</span> kubelet-1.18.20 kubectl-1.18.20 kubeadm-1.18.20 --downloadonly --downloaddir<span class="token operator">=</span>./  <span class="token comment">#下载到当前目录，下载的版本是1.18.8</span>
+
+<span class="token comment">#安装</span>
+yum localinstall -y ./*.rpm
+<span class="token comment">#kubelet设置开机启动（注意：先不启动，现在启动的话会报错）</span>
+systemctl <span class="token builtin class-name">enable</span> kubelet
+
+<span class="token comment">#查看版本</span>
+kubelet --version
+<span class="token comment">#查看需要的镜像 </span>
+kubeadm config images list
+<span class="token comment">#![](https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/16383719466961638371946651.png)</span>
+
+<span class="token comment">#可配置设置拉取k8s的源 </span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span><span class="token string">EOF<span class="token bash punctuation"> <span class="token operator">></span> /etc/yum.repos.d/kubernetes.repo</span>
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF</span>
+
+<span class="token comment"># 在安装kubernetes集群之前，必须要提前准备好集群需要的镜像，所需镜像可以通过下面命令查看</span>
+kubeadm config images list
+
+<span class="token comment"># 下载镜像</span>
+<span class="token comment"># 此镜像kubernetes的仓库中，由于网络原因，无法连接，下面提供了一种替换方案</span>
+<span class="token assign-left variable">images</span><span class="token operator">=</span><span class="token punctuation">(</span>
+  kube-apiserver:v1.18.20
+  kube-controller-manager:v1.18.20
+  kube-scheduler:v1.18.20
+  kube-proxy:v1.18.20
+  pause:3.2
+  etcd:3.4.3-0
+  coredns:1.6.7
+<span class="token punctuation">)</span>
+
+<span class="token keyword">for</span> <span class="token for-or-select variable">imageName</span> <span class="token keyword">in</span> <span class="token variable">${images<span class="token punctuation">[</span>@<span class="token punctuation">]</span>}</span><span class="token punctuation">;</span><span class="token keyword">do</span>
+  docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/<span class="token variable">$imageName</span>
+  docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/<span class="token variable">$imageName</span> k8s.gcr.io/<span class="token variable">$imageName</span>
+  docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/<span class="token variable">$imageName</span> 
+<span class="token keyword">done</span>
+<span class="token comment">#查看下载好的镜像</span>
+docker images
+
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h4 class="wolai-block"><span class="inline-wrap">4）master<span class="jill"></span>节点的初始化</span></h4><div class="wolai-block wolai-text"><div><span class="inline-wrap">k8s<span class="jill"></span>中的<span class="jill"></span>k8s-master<span class="jill"></span>节点初始化操作！</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre>
+<span class="token comment">#开始初始化</span>
+kubeadm init --kubernetes-version<span class="token operator">=</span><span class="token number">1.18</span>.20 <span class="token punctuation">\</span>
+--apiserver-advertise-address<span class="token operator">=</span><span class="token number">192.168</span>.87.101 <span class="token punctuation">\</span>
+--service-cidr<span class="token operator">=</span><span class="token number">10.1</span>.0.0/16 <span class="token punctuation">\</span>
+--pod-network-cidr<span class="token operator">=</span><span class="token number">10.222</span>.0.0/16
+<span class="token comment">#初始化 ，本质就是安装需要的组件的过程（可能要修改两处，版本与192.168.87.101）,特别感谢:https://blog.csdn.net/weixin_41831919/article/details/119790356</span>
+<span class="token comment">#初始化失败？ 运行：</span>
+<span class="token comment"># kubeadm reset </span>
+<span class="token comment"># rm -rf $HOME/.kube/config  &amp; rm -rf $HOME/.kube; </span>
+<span class="token comment"># rm -rf /etc/cni/net.d   &amp; ipvsadm --clear  </span>
+<span class="token comment">#再执行初始化命令 </span></pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">初始化成功后，会输出以下内容：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/16383721743291638372174304.png" style="width: 868.6666666666666px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">第一块（红色）的作用是给<span class="jill"></span>k8s-master<span class="jill"></span>执行，执行完后就可以在<span class="jill"></span>k8s-master<span class="jill"></span>上操作<span class="jill"></span>k8s<span class="jill"></span>集群了。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">第二块是给<span class="jill"></span>k8s-node01<span class="jill"></span>进行注册成为集群的<span class="jill"></span>node<span class="jill"></span>节点的，需要保存这个！！</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">忘记加入集群链接？ ( 执行以下重新获取 )&gt;&gt; </span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2&gt;/dev/null | openssl dgst -sha256 -hex | sed &#39;s/^.* //&#39;</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><a href="https://www.cnblogs.com/zjazn/p/15971466.html"><span>想要卸载，还原成普通的主机？&gt;&gt;</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl join 192.168.87.101:6443 --token 386k91.uao9n9hvhd52wqoz --discovery-token-ca-cert-hash sha256:c8d5cd5e82311f4e3d76473d6a03487fc26cea84a3a22c19737b12090e502f06 </span></div></div><h4 class="wolai-block"><span class="inline-wrap">5）给集群安装通信组件</span></h4><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token function">mkdir</span> Calico
+<span class="token builtin class-name">cd</span> Calico
+<span class="token function">wget</span> <span class="token function">wget</span> https://d
+ocs.projectcalico.org/manifests/calico.yaml  --no-check-certificate
+<span class="token comment">#搜索# no effect. This should fall within `--cluster-cidr`.  解注释下面的两行</span>
+            <span class="token comment"># no effect. This should fall within `--cluster-cidr`.</span>
+            - name: CALICO_IPV4POOL_CIDR
+              value: <span class="token string">"192.168.0.0/16"</span>
+
+<span class="token comment">#然后：</span>
+<span class="token function">sed</span> -i <span class="token string">'s/192.168.0.0/10.222.0.0/g'</span> calico.yaml
+kubectl apply -f calico.yaml
+<span class="token comment">#查看是否运行正常</span>
+kubectl get pod -n kube-system  <span class="token operator">|</span> <span class="token function">grep</span> calico
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h4 class="wolai-block"><span class="inline-wrap">6）查看节点的状态</span></h4><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token punctuation">[</span>root@k8s-master ~<span class="token punctuation">]</span><span class="token comment"># kubectl get nodes</span>
+NAME         STATUS   ROLES    AGE   VERSION
+k8s-master   Ready    master   34h   v1.18.20
+k8s-node01   Ready    <span class="token operator">&lt;</span>none<span class="token operator">></span>   34h   v1.18.20
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">Ready   说明节点正常，NoReady  要等了。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">实在不行，你可以尝试重装<span class="jill"></span>calico~</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl delete -f calico.yaml</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl create -f calico.yaml</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h3 class="wolai-block"><span class="inline-wrap">5.1<span class="jill"></span>安装<span class="jill"></span>Jenkins</span></h3><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#在master节点上安装nfs服务器，开放</span>
+yum <span class="token function">install</span> -y nfs-utils <span class="token comment">#也需要安装这个！！！！</span>
+<span class="token comment">#准备公开一个目录，供jenkins存储</span>
+<span class="token function">mkdir</span> -p /opt/nfs/jenkins
+<span class="token comment">#*代表对所有IP都开放此目录，rw是读写</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span><span class="token string">EOF<span class="token bash punctuation"> <span class="token operator">>></span> /etc/exports</span>
+/opt/nfs/jenkins *(rw,no_root_squash)
+EOF</span>
+<span class="token comment">#设置nfs开机自启动与现在启动</span>
+systemctl <span class="token builtin class-name">enable</span> nfs
+systemctl start nfs
+<span class="token comment">#去node节点上，查看是否共享成功</span>
+showmount -e <span class="token number">192.168</span>.87.101
+
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">下载需要的资料(拿到<span class="jill"></span>DevOps<span class="jill"></span>目录下的文件)：</span><span class="inline-wrap"><a href="https://github.com/18476305640/fileBox.git"><span>https://github.com/18476305640/fileBox.git</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>nfs-client</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">先安装资料中的<span class="jill"></span>nfs-client，注意需要修改“deployment.yaml”文件中的<span class="jill"></span>nfs<span class="jill"></span>服务器地址，然后就安装<span class="jill"></span>nfs-client</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl create -f ./</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>创建<span class="jill"></span>kube-ops<span class="jill"></span>名称空间</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl create ns kube-ops #需要创建一个名称空间</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>正式安装<span class="jill"></span>jenkins-master</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">在安装<span class="jill"></span>jenkins-master<span class="jill"></span>中需要，然后就去资料中的&quot;jenkins-master&quot;中进行安装</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl create -f ./</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubectl get pod,svc -n kube-ops #查看分配的<span class="jill"></span>jenkins<span class="jill"></span>端口</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304110307461.png" style="width: 833.3333333333334px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">#然后利用<span class="jill"></span>http://192.168.87.101:32053/ 打开即可。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>获取<span class="jill"></span>token<span class="jill"></span>进行登录</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">但登录要<span class="jill"></span>token，那么我们就去<span class="jill"></span>nfs<span class="jill"></span>中拿，注意不是页面提示的那个路线去，因为我们将<span class="jill"></span>jenkins<span class="jill"></span>部署在容器中，所以要到我们公开的<span class="jill"></span>nfs&gt; jenkins<span class="jill"></span>中获取：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304110531229.png" style="width: 886px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">先不要安装插件，我们先进入，再自己安装用到的插件！</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>安装插件</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><a href="https://www.cnblogs.com/zjazn/p/15972044.html"><span>在安装插件前，我们需要切换为国内镜像&gt;&gt;</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">然后安装插件：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><a href="https://plugins.jenkins.io/localization-zh-cn"><span>Localization: Chinese</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">Git</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">Pipeline</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">Extended Choice Parameter</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">Kubernetes</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>将<span class="jill"></span>jenkins<span class="jill"></span>与<span class="jill"></span>k8s<span class="jill"></span>整合</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">需要插件：Kubernetes</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">进入<span class="jill"></span>Jenkins<span class="jill"></span>的 </span><span class="inline-wrap"><a href="http://192.168.87.101:32053/configureClouds/"><span>http://..../configureClouds/</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">新建云：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304131836140.png" style="width: 1104.6666666666667px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">要填写的信息如下：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kubernetes</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><a href="https://kubernetes.default.svc.cluster.local"><span>https://kubernetes.default.svc.cluster.local</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">kube-ops</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><a href="http://jenkins.kube-ops.svc.cluster.local:8080"><span>http://jenkins.kube-ops.svc.cluster.local:8080</span></a></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>安装<span class="jill"></span>jenkins-slave</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">再公开一个目录<span class="jill"></span>maven:</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre><span class="token comment">#公开一个目录给jenkin-slave 用于存储maven包，追加的方式！</span>
+<span class="token function">cat</span> <span class="token operator">&lt;&lt;</span><span class="token string">EOF<span class="token bash punctuation"> <span class="token operator">>></span> /etc/exports</span>
+/opt/nfs/maven *(rw,no_root_squash)
+EOF</span>
+<span class="token comment">#重启</span>
+systemctl restart nfs
+<span class="token comment">#解决权限问题！！！这很重要！！！！</span>
+<span class="token function">chmod</span> -R <span class="token number">777</span> /opt/nfs/maven
+<span class="token function">chmod</span> <span class="token number">777</span> /var/run/docker.sock
+</pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>安装<span class="jill"></span>jenkins-slave</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">从资料中拿到这三个文件（</span><span class="inline-wrap"><a href="https://github.com/18476305640/fileBox/tree/main"><span>https://github.com/18476305640/fileBox/tree/main</span></a></span><span class="inline-wrap">  &gt; DevOps &gt; ）：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304142538695.png" style="width: 677.3333333333334px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">需要修改<span class="jill"></span>Dockerfile<span class="jill"></span>中的“harbor”维护者的名字（zhuangjie）。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">在推送前，我们需要整合<span class="jill"></span>Harbor：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">在<span class="jill"></span>K8S<span class="jill"></span>的第个节点都执行，将私服的<span class="jill"></span>Harbor<span class="jill"></span>加入信任镜像中！</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">vi /etc/docker/daemon.json #你可能要修改下面私服<span class="jill"></span>Harbor<span class="jill"></span>的信息</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="JSON" class="marker"></div><pre><span class="token punctuation">{</span> 
+ <span class="token property">"registry-mirrors"</span><span class="token operator">:</span> <span class="token punctuation">[</span><span class="token string">"https://zydiol88.mirror.aliyuncs.com"</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+ <span class="token property">"insecure-registries"</span><span class="token operator">:</span> <span class="token punctuation">[</span><span class="token string">"192.168.87.102:85"</span><span class="token punctuation">]</span>
+<span class="token punctuation">}</span></pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap">systemctl restart docker  
+systemctl status docker  #查看<span class="jill"></span>docker<span class="jill"></span>状态</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">这样就将我们的私服加入了信任仓库中，我们就可以把镜像推送到<span class="jill"></span>Harbor<span class="jill"></span>上了</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">开始制作镜像：</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre>docker build -t jenkins-slave-maven:latest <span class="token builtin class-name">.</span> <span class="token comment">#制作镜像</span>
+docker tag jenkins-slave-maven:latest <span class="token number">192.168</span>.87.102:85/library/jenkins-slave-maven:latest <span class="token comment">#打标</span>
+docker login -u admin -p gkmzjaznH21 <span class="token number">192.168</span>.87.102:85 <span class="token comment">#先登录，使用admin账号才能推送到library上，这里我密码改了，如何没改admin密码是Harbor12345</span>
+docker push <span class="token number">192.168</span>.87.102:85/library/jenkins-slave-maven:latest <span class="token comment">#开始推送</span></pre></div></code-block><h3 class="wolai-block"><span class="inline-wrap">6.1<span class="jill"></span>整合工作</span></h3><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>获取<span class="jill"></span>k8s<span class="jill"></span>凭证(整合<span class="jill"></span>K8S)</code></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">然后安装<span class="jill"></span>Kubernetes Continuous Deploy<span class="jill"></span>插件。</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">创建<span class="jill"></span>K8S<span class="jill"></span>凭证：</span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304133757790.png" style="width: 1392px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">博主的：119251a2-c90b-456b-914b-04bf084ecb8a</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b>创建<span class="jill"></span>secret</b></span></div></div><div class="wolai-block wolai-text"><div><span class="red inline-wrap">能不能拉取镜像 部署看这个了，如果<span class="jill"></span>Harbor<span class="jill"></span>改变了,这里删掉重新创建，名字不改，其它的都是不用改的。</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="Bash" class="marker"></div><pre>docker login -u zhuangjie -p gkmzjaznH21 <span class="token number">192.168</span>.87.102:85
+kubectl create secret docker-registry registry-auth-secret --docker-server<span class="token operator">=</span><span class="token number">192.168</span>.87.102:85 --docker-username<span class="token operator">=</span>zhuangjie --docker-password<span class="token operator">=</span>gkmzjaznH21<span class="token comment"># [--docker-email=2119299531@qq.com](mailto:--docker-email=2119299531@qq.com)</span>
+kubectl get secret <span class="token comment">#存在即可“ registry-auth-secret”</span>
+<span class="token comment">#删除：kubectl delete secret registry-auth-secret</span></pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b><code>获取<span class="jill"></span>gitlab<span class="jill"></span>凭证</code></b></span><span class="inline-wrap"><code>(整合<span class="jill"></span>gitlab)</code></span></div></div><div class="wolai-block wolai-center"><figure style="width: 100%"><img src="https://cdn.jsdelivr.net/gh/18476305640/typora@master/image/2022/03/04/20220304144622119.png" style="width: 1434.6666666666667px"/></figure></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">在<span class="jill"></span>Jenkins<span class="jill"></span>中添加普通账号-密码凭证：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">zhuangjie gkmzjazn</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">博主的凭证：ea7e5a47-3e95-4575-82ff-5a97ac2f956f</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b><code>获取<span class="jill"></span>harbor<span class="jill"></span>凭证</code></b></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">在<span class="jill"></span>Jenkins<span class="jill"></span>中添加普通账号-密码凭证：</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b>（zhuangjie/ gkmzjaznH21）：</b></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">博主的凭证：b9b2f427-94d6-4001-b004-33f8489cf0dc</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><h3 class="wolai-block"><span class="inline-wrap">7.1 流水线</span></h3><div class="wolai-block wolai-text"><div><span class="inline-wrap"><b>流水线：</b></span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">构建时需要两个，项目<span class="jill"></span>project_name（多选），与分支<span class="jill"></span>branch（字符）</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">请选择需要构建的项目</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">6</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">,</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">cart-service@53024,product-service@53022,store-service@53023,user-service@53021,uaa-service@53020,gateway-service@53010</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">branch</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">master</span></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap">请输入分支名称</span></div></div><code-block class="wolai-block"><div class="wolai-pre"><div data-lang="YAML" class="marker"></div><pre>“”def git_address = "http<span class="token punctuation">:</span>//192.168.87.100<span class="token punctuation">:</span>82/zhuangjie/smallarea.git"
+def git_auth = "ea7e5a47<span class="token punctuation">-</span>3e95<span class="token punctuation">-</span>4575<span class="token punctuation">-</span>82ff<span class="token punctuation">-</span>5a97ac2f956f"
+//构建版本的名称
+def tag = "latest"
+//Harbor私服地址
+def harbor_url = "192.168.87.102<span class="token punctuation">:</span>85"
+//Harbor的项目名称
+def harbor_project_name = "smallarea"
+//Harbor的凭证
+def harbor_auth = "b9b2f427<span class="token punctuation">-</span>94d6<span class="token punctuation">-</span>4001<span class="token punctuation">-</span>b004<span class="token punctuation">-</span>33f8489cf0dc"
+def secret_name = "registry<span class="token punctuation">-</span>auth<span class="token punctuation">-</span>secret"
+//k8s凭证
+def k8s_auth = "119251a2<span class="token punctuation">-</span>c90b<span class="token punctuation">-</span>456b<span class="token punctuation">-</span>914b<span class="token punctuation">-</span>04bf084ecb8a";
+//自定义内容
+def find_block = <span class="token punctuation">[</span>
+    "gateway<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-security"</span><span class="token punctuation">,</span>
+    "uaa<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-security"</span><span class="token punctuation">,</span>
+    "cart<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-service"</span><span class="token punctuation">,</span>
+    "product<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-service"</span><span class="token punctuation">,</span>
+    "store<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-service"</span><span class="token punctuation">,</span>
+    "user<span class="token punctuation">-</span>service"<span class="token punctuation">:</span><span class="token string">"distributed-smallarea-service"</span>
+<span class="token punctuation">]</span>
+//自定义内容：common's install ，下面要install的以“<span class="token punctuation">,</span>”隔开！  
+def commons_block = "./".split('<span class="token punctuation">,</span>')
+
+<span class="token key atrule">podTemplate(label</span><span class="token punctuation">:</span> <span class="token string">'jenkins-slave'</span><span class="token punctuation">,</span> <span class="token key atrule">cloud</span><span class="token punctuation">:</span> <span class="token string">'kubernetes'</span><span class="token punctuation">,</span> <span class="token key atrule">containers</span><span class="token punctuation">:</span> <span class="token punctuation">[</span>
+    containerTemplate(
+        <span class="token key atrule">name</span><span class="token punctuation">:</span> <span class="token string">'jnlp'</span><span class="token punctuation">,</span> 
+        <span class="token key atrule">image</span><span class="token punctuation">:</span> <span class="token string">"192.168.87.102:85/library/jenkins-slave-maven:latest"</span>
+    )<span class="token punctuation">,</span>
+    containerTemplate(
+        <span class="token key atrule">name</span><span class="token punctuation">:</span> <span class="token string">'docker'</span><span class="token punctuation">,</span> 
+        <span class="token key atrule">image</span><span class="token punctuation">:</span> <span class="token string">"docker:stable"</span><span class="token punctuation">,</span>
+        <span class="token key atrule">ttyEnabled</span><span class="token punctuation">:</span> <span class="token boolean important">true</span><span class="token punctuation">,</span>
+        <span class="token key atrule">command</span><span class="token punctuation">:</span> <span class="token string">'cat'</span>
+    )<span class="token punctuation">,</span>
+  <span class="token punctuation">]</span><span class="token punctuation">,</span>
+  <span class="token key atrule">volumes</span><span class="token punctuation">:</span> <span class="token punctuation">[</span>
+    <span class="token key atrule">hostPathVolume(mountPath</span><span class="token punctuation">:</span> <span class="token string">'/var/run/docker.sock'</span><span class="token punctuation">,</span> <span class="token key atrule">hostPath</span><span class="token punctuation">:</span> '/var/run/docker.sock')<span class="token punctuation">,</span>
+    <span class="token key atrule">nfsVolume(mountPath</span><span class="token punctuation">:</span> <span class="token string">'/usr/local/apache-maven/repo'</span><span class="token punctuation">,</span> <span class="token key atrule">serverAddress</span><span class="token punctuation">:</span> <span class="token string">'192.168.87.101'</span> <span class="token punctuation">,</span> <span class="token key atrule">serverPath</span><span class="token punctuation">:</span> '/opt/nfs/maven')<span class="token punctuation">,</span>
+  <span class="token punctuation">]</span><span class="token punctuation">,</span>
+) 
+<span class="token punctuation">{</span>
+  node("jenkins<span class="token punctuation">-</span>slave")<span class="token punctuation">{</span>
+      // 第一步
+      stage('拉取代码')<span class="token punctuation">{</span>
+         checkout(<span class="token punctuation">[</span><span class="token key atrule">$class</span><span class="token punctuation">:</span> <span class="token string">'GitSCM'</span><span class="token punctuation">,</span> <span class="token key atrule">branches</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token key atrule">name</span><span class="token punctuation">:</span> <span class="token string">'${branch}'</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token key atrule">userRemoteConfigs</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token key atrule">credentialsId</span><span class="token punctuation">:</span> <span class="token string">"${git_auth}"</span><span class="token punctuation">,</span> <span class="token key atrule">url</span><span class="token punctuation">:</span> <span class="token string">"${git_address}"</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">]</span>)
+      <span class="token punctuation">}</span>
+      // 第二步
+      stage('代码编译')<span class="token punctuation">{</span>
+         //编译并安装公共工程
+         //自定义内容！！！
+         for (int i=0; i&lt;commons_block.length; i++) <span class="token punctuation">{</span>
+            def install_path = commons_block<span class="token punctuation">[</span>i<span class="token punctuation">]</span>
+            sh "mvn <span class="token punctuation">-</span>f $<span class="token punctuation">{</span>install_path<span class="token punctuation">}</span> clean install"
+         <span class="token punctuation">}</span>
+      <span class="token punctuation">}</span>
+      // 第三步
+      stage('构建镜像，部署项目')<span class="token punctuation">{</span>
+          //把选择的项目信息转为数组
+      def selectedProjects = "$<span class="token punctuation">{</span>project_name<span class="token punctuation">}</span>".split('<span class="token punctuation">,</span>')
+      
+            for(int i=0;i&lt;selectedProjects.size();i++)<span class="token punctuation">{</span>
+                //取出每个项目的名称和端口
+                def currentProject = selectedProjects<span class="token punctuation">[</span>i<span class="token punctuation">]</span>;
+                //项目名称
+                def currentProjectName = currentProject.split('@')<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                //项目启动端口
+                def currentProjectPort = currentProject.split('@')<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span>
+
+                 //定义镜像名称
+                 def imageName = "$<span class="token punctuation">{</span>currentProjectName<span class="token punctuation">}</span><span class="token punctuation">:</span>$<span class="token punctuation">{</span>tag<span class="token punctuation">}</span>"
+                 //自定义内容
+                 //因为maven中的项目名与代码的项目名不同，如果不修改，找的是代码的项目名来打标签的，但实际是pom中定义的名称
+                 def _currentProjectName = currentProjectName.split('<span class="token punctuation">-</span>')<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                 def _imageName = "$<span class="token punctuation">{</span>_currentProjectName<span class="token punctuation">}</span><span class="token punctuation">:</span>$<span class="token punctuation">{</span>tag<span class="token punctuation">}</span>"
+         //编译，构建本地镜像
+         def parents = find_block<span class="token punctuation">[</span>currentProjectName<span class="token punctuation">]</span>
+         sh "mvn <span class="token punctuation">-</span>f $<span class="token punctuation">{</span>parents<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>currentProjectName<span class="token punctuation">}</span>  clean package dockerfile<span class="token punctuation">:</span>build"
+         container('docker') <span class="token punctuation">{</span>
+           
+           //给镜像打标签
+           //<span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span> 已修改 将“imageName” 替换为 “_imageName”
+           sh "docker tag $<span class="token punctuation">{</span>_imageName<span class="token punctuation">}</span> $<span class="token punctuation">{</span>harbor_url<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>harbor_project_name<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>imageName<span class="token punctuation">}</span>"
+
+           //登录Harbor，并上传镜像
+           withCredentials(<span class="token punctuation">[</span><span class="token key atrule">usernamePassword(credentialsId</span><span class="token punctuation">:</span> <span class="token string">"${harbor_auth}"</span><span class="token punctuation">,</span> <span class="token key atrule">passwordVariable</span><span class="token punctuation">:</span> <span class="token string">'password'</span><span class="token punctuation">,</span> <span class="token key atrule">usernameVariable</span><span class="token punctuation">:</span> 'username')<span class="token punctuation">]</span>) <span class="token punctuation">{</span>
+              //登录
+              sh "docker login <span class="token punctuation">-</span>u $<span class="token punctuation">{</span>username<span class="token punctuation">}</span> <span class="token punctuation">-</span>p $<span class="token punctuation">{</span>password<span class="token punctuation">}</span> $<span class="token punctuation">{</span>harbor_url<span class="token punctuation">}</span>"
+              //上传镜像
+              sh "docker push $<span class="token punctuation">{</span>harbor_url<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>harbor_project_name<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>imageName<span class="token punctuation">}</span>"
+           <span class="token punctuation">}</span>
+
+           //删除本地镜像
+           //<span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span> 已修改 将“imageName” 替换为 “_imageName”
+           sh "docker rmi <span class="token punctuation">-</span>f $<span class="token punctuation">{</span>_imageName<span class="token punctuation">}</span>"
+           sh "docker rmi <span class="token punctuation">-</span>f $<span class="token punctuation">{</span>harbor_url<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>harbor_project_name<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>imageName<span class="token punctuation">}</span>"
+         <span class="token punctuation">}</span>
+         
+         def deploy_image_name = "$<span class="token punctuation">{</span>harbor_url<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>harbor_project_name<span class="token punctuation">}</span>/$<span class="token punctuation">{</span>imageName<span class="token punctuation">}</span>"
+         
+         //部署到K8S
+         //<span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span><span class="token tag">!</span> 已修改 加入了<span class="token punctuation">-</span><span class="token punctuation">></span>parents
+           sh """
+                        sed <span class="token punctuation">-</span>i 's<span class="token comment">#\$IMAGE_NAME#${deploy_image_name}#' ${parents}/${currentProjectName}/deploy.yml</span>
+            sed <span class="token punctuation">-</span>i 's<span class="token comment">#\$SECRET_NAME#${secret_name}#' ${parents}/${currentProjectName}/deploy.yml</span>
+                 """
+                      
+                 <span class="token key atrule">kubernetesDeploy configs</span><span class="token punctuation">:</span> <span class="token string">"${parents}/${currentProjectName}/deploy.yml"</span><span class="token punctuation">,</span> <span class="token key atrule">kubeconfigId</span><span class="token punctuation">:</span> <span class="token string">"${k8s_auth}"</span>
+         <span class="token punctuation">}</span> 
+      <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span></pre></div></code-block><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div><div class="wolai-block wolai-text"><div><span class="inline-wrap"><code>解决遇到的问题</code></span></div></div><ol class="wolai-block"><li><div class="marker"></div><span class="inline-wrap">请确保内容充足，否则<span class="jill"></span>jenkins-slave<span class="jill"></span>在帮<span class="jill"></span>jenkins<span class="jill"></span>做编译时，会因内存不足下线！！</span></li><li><div class="marker"></div><span class="inline-wrap">当遇到：</span><span class="red inline-wrap">INFO: Retrying request to {}-&gt;unix://localhost:80</span><div class="wolai-block wolai-text"><div><span class="inline-wrap">在<span class="jill"></span>K8S<span class="jill"></span>各集群节点中执行：</span><span class="inline-wrap"><b>chmod 777 /var/run/docker.sock</b></span></div></div></li><li><div class="marker"></div><span class="inline-wrap">如果你的项目名与代码的项目名相同，你需要修改上面的脚本，注释_imageName<span class="jill"></span>变量，且将脚本 中的&quot;_imageName&quot; 改为“imageName”</span></li></ol><div class="wolai-block wolai-text"><div><span class="inline-wrap"></span><br/></div></div></article><footer></footer></body></html>
